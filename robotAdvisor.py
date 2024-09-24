@@ -8,7 +8,29 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-# Cargar datos en un DataFrame
+class LSTMModel(nn.Module):
+    def __init__(self, input_size, hidden_layer_size, output_size):
+        super(LSTMModel, self).__init__()
+        self.hidden_layer_size = hidden_layer_size
+        self.lstm = nn.LSTM(input_size, hidden_layer_size, batch_first=True)
+        self.linear = nn.Linear(hidden_layer_size, output_size)
+    
+    def forward(self, input_seq):
+        lstm_out, _ = self.lstm(input_seq)
+        predictions = self.linear(lstm_out[:, -1])
+        return predictions
+    
+# Función para crear secuencias de tiempo para LSTM
+def create_sequences(data, seq_length):
+    xs, ys = [], []
+    for i in range(len(data) - seq_length):
+        x = data[i:i + seq_length]
+        y = data[i + seq_length][0]  # Precio a predecir (se puede cambiar la columna objetivo)
+        xs.append(x)
+        ys.append(y)
+    return np.array(xs), np.array(ys)
+
+# Cargar datos
 df = pd.read_csv('eq_fund.csv', delimiter=';')
 df = df.replace(' ', 0)
 df['abrir'] = df['abrir'].str.replace(',', '.').astype(float)
@@ -21,18 +43,8 @@ data = df[['abrir', 'min', 'max']].values
 scaler = MinMaxScaler(feature_range=(0, 1))
 scaled_data = scaler.fit_transform(data)
 
-# Función para crear secuencias de tiempo para LSTM
-def create_sequences(data, seq_length):
-    xs, ys = [], []
-    for i in range(len(data) - seq_length):
-        x = data[i:i + seq_length]
-        y = data[i + seq_length][0]  # Precio a predecir (puedes cambiar la columna objetivo)
-        xs.append(x)
-        ys.append(y)
-    return np.array(xs), np.array(ys)
-
-# Definir longitud de la secuencia
-sequence_length = 300  # Longitud de la secuencia (puedes ajustar)
+# Definición de la longitud de la secuencia
+sequence_length = 300  # Longitud de la secuencia (se puede ajustar)
 X, y = create_sequences(scaled_data, sequence_length)
 
 # Verificar si la GPU está disponible
@@ -47,23 +59,10 @@ y_tensor = torch.tensor(y, dtype=torch.float32).to(device)
 dataset = TensorDataset(X_tensor, y_tensor)
 dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
 
-# Definir modelo LSTM
-class LSTMModel(nn.Module):
-    def __init__(self, input_size, hidden_layer_size, output_size):
-        super(LSTMModel, self).__init__()
-        self.hidden_layer_size = hidden_layer_size
-        self.lstm = nn.LSTM(input_size, hidden_layer_size, batch_first=True)
-        self.linear = nn.Linear(hidden_layer_size, output_size)
-    
-    def forward(self, input_seq):
-        lstm_out, _ = self.lstm(input_seq)
-        predictions = self.linear(lstm_out[:, -1])
-        return predictions
-
 # Inicializar el modelo
 input_size = 3  # Tres variables de entrada (abrir, min, max)
 hidden_layer_size = 128  # Más neuronas para mayor capacidad de representación
-output_size = 1  # Queremos predecir una variable (precio)
+output_size = 1  # Predecir una variable (precio)
 
 model = LSTMModel(input_size, hidden_layer_size, output_size).to(device)
 
